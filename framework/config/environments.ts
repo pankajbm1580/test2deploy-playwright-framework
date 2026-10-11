@@ -1,14 +1,32 @@
+import { parseBaseUrl } from './base-url';
+
 /**
- * Resolves which API environment the tests run against.
+ * Resolves which UI and API environments the tests run against.
  *
  * Everything comes from environment variables (or a local, git-ignored .env file),
  * never from source code:
+ *   UI_BASE_URL     app under test for the browser suite (default: the TodoMVC demo)
  *   API_ENV         jsonplaceholder (default) | qa | staging
  *   API_BASE_URL    overrides the preset base URL; required for qa and staging
  *   API_TOKEN       optional; sent as "Authorization: Bearer <token>"
  *   API_TIMEOUT_MS  per-request timeout in ms (default 10000)
  *   API_READ_ONLY   "true"/"false"; overrides whether write tests are allowed
+ * Base URLs must not contain credentials, a query string or a fragment.
  */
+
+export interface UiEnvironment {
+  baseURL: string;
+}
+
+const DEFAULT_UI_BASE_URL = 'https://demo.playwright.dev/todomvc/';
+
+export function resolveUiEnvironment(env: NodeJS.ProcessEnv = process.env): UiEnvironment {
+  const url = parseBaseUrl('UI_BASE_URL', env.UI_BASE_URL || DEFAULT_UI_BASE_URL);
+  // Tests navigate with page.goto('./'), which resolves against the last path segment,
+  // so the base URL must end with "/" to keep its full path (e.g. /todomvc/).
+  if (!url.pathname.endsWith('/')) url.pathname += '/';
+  return { baseURL: url.href };
+}
 
 export type ApiEnvironmentName = 'jsonplaceholder' | 'qa' | 'staging';
 
@@ -47,15 +65,7 @@ export function resolveApiEnvironment(env: NodeJS.ProcessEnv = process.env): Api
   if (!baseURL) {
     throw new Error(`API_BASE_URL must be set when API_ENV is "${name}".`);
   }
-  let parsedURL: URL;
-  try {
-    parsedURL = new URL(baseURL);
-  } catch {
-    throw new Error('API_BASE_URL is not a valid URL. The value is not shown because it may contain credentials.');
-  }
-  if (parsedURL.username || parsedURL.password) {
-    throw new Error('API_BASE_URL must not contain a username or password. Use API_TOKEN for authentication.');
-  }
+  parseBaseUrl('API_BASE_URL', baseURL, { credentialsHint: 'Use API_TOKEN for authentication.' });
 
   const timeoutMs = env.API_TIMEOUT_MS ? Number(env.API_TIMEOUT_MS) : DEFAULT_TIMEOUT_MS;
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {

@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Edit a todo', () => {
   test('Edit a todo title and save with Enter', async ({ page }) => {
-    await page.goto('https://demo.playwright.dev/todomvc/');
+    await page.goto('./');
     const input = page.getByRole('textbox', { name: 'What needs to be done?' });
     const editBox = page.getByRole('textbox', { name: 'Edit' });
 

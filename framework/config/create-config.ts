@@ -1,8 +1,7 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
 import { loadEnvFile } from './load-env';
 import { apiDiagnostics, htmlReportEnabled, htmlReportMode, reporters, uiDiagnostics } from './diagnostics';
-// Moves into the framework's shared environment layer in Phase 2.
-import { resolveApiEnvironment } from '../../api/config/environments';
+import { resolveApiEnvironment, resolveUiEnvironment } from './environments';
 
 export type Suite = 'ui' | 'api' | 'all';
 
@@ -22,11 +21,11 @@ const rootTestDir: Record<Suite, string> = {
 };
 
 function uiProjects(): Project[] {
-  const diagnostics = uiDiagnostics();
+  const use = { baseURL: resolveUiEnvironment().baseURL, ...uiDiagnostics() };
   return [
-    { name: 'chromium', testDir: './e2e', use: { ...devices['Desktop Chrome'], ...diagnostics } },
-    { name: 'firefox', testDir: './e2e', use: { ...devices['Desktop Firefox'], ...diagnostics } },
-    { name: 'webkit', testDir: './e2e', use: { ...devices['Desktop Safari'], ...diagnostics } },
+    { name: 'chromium', testDir: './e2e', use: { ...devices['Desktop Chrome'], ...use } },
+    { name: 'firefox', testDir: './e2e', use: { ...devices['Desktop Firefox'], ...use } },
+    { name: 'webkit', testDir: './e2e', use: { ...devices['Desktop Safari'], ...use } },
   ];
 }
 
@@ -37,7 +36,9 @@ function apiProjects(): Project[] {
 export function createConfig({ suite }: { suite: Suite }) {
   loadEnvFile();
 
-  // Validate API configuration up front so a misconfigured run fails before any test starts.
+  // Validate configuration up front so a misconfigured run fails before any test starts.
+  // Each suite checks only the variables it uses, so a bad UI_BASE_URL never blocks API runs.
+  if (suite !== 'api') resolveUiEnvironment();
   if (suite !== 'ui') resolveApiEnvironment();
 
   // Explain the HTML report decision once, from the main process only (workers also load the config).

@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Add a todo', () => {
   test('Add a single todo', async ({ page }) => {
     // 1. Navigate to https://demo.playwright.dev/todomvc/ with an empty list
-    await page.goto('https://demo.playwright.dev/todomvc/');
+    await page.goto('./');
     const input = page.getByRole('textbox', { name: 'What needs to be done?' });
     await expect(input).toBeVisible();
     await expect(input).toBeFocused();

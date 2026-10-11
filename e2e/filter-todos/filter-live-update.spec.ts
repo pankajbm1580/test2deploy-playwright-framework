@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Filter active and completed todos', () => {
   test('Filtered views update live when todos change', async ({ page }) => {
-    await page.goto('https://demo.playwright.dev/todomvc/');
+    await page.goto('./');
     const input = page.getByRole('textbox', { name: 'What needs to be done?' });
     const items = page.getByTestId('todo-item');
     const titles = page.getByTestId('todo-title');

@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Delete a todo', () => {
   test('Delete the last remaining todo and clear completed', async ({ page }) => {
-    await page.goto('https://demo.playwright.dev/todomvc/');
+    await page.goto('./');
     const input = page.getByRole('textbox', { name: 'What needs to be done?' });
     const items = page.getByTestId('todo-item');
 

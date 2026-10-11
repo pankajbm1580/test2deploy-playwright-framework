@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Complete a todo', () => {
   test("Complete all todos with 'Mark all as complete'", async ({ page }) => {
-    await page.goto('https://demo.playwright.dev/todomvc/');
+    await page.goto('./');
     const input = page.getByRole('textbox', { name: 'What needs to be done?' });
 
     // 1. Add 'Buy milk' and 'Walk dog', then click the 'Mark all as complete' toggle

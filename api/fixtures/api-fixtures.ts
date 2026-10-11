@@ -1,5 +1,5 @@
 import { test as base, expect as baseExpect, type APIRequest, type APIRequestContext } from '@playwright/test';
-import { resolveApiEnvironment, type ApiEnvironment } from '../config/environments';
+import { resolveApiEnvironment, type ApiEnvironment } from '../../framework/config/environments';
 import { startStubServer, type StubServer } from '../support/stub-server';
 import { schemaMatchers } from '../support/schema';
 import { withRedactedErrors } from '../support/redact';

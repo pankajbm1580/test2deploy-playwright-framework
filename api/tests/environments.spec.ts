@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { resolveApiEnvironment } from '../config/environments';
+import { resolveApiEnvironment, resolveUiEnvironment } from '../../framework/config/environments';
 import { htmlReportMode, videoMode } from '../../framework/config/diagnostics';
 
 /** Runs `fn`, which must throw, and returns the error message. */
@@ -101,6 +101,62 @@ test.describe('API environment configuration', () => {
       const message = errorMessage(() => resolveApiEnvironment({ API_ENV: 'qa', API_BASE_URL: url }));
       expect(message).toBe('API_BASE_URL must not contain a username or password. Use API_TOKEN for authentication.');
       for (const fragment of [url, 'fake-user', 'fake-pass-123']) {
+        expect(message).not.toContain(fragment);
+      }
+    }
+  });
+  test('API_BASE_URL with a query string or fragment is rejected without echoing it', () => {
+    // Obviously fake placeholder values; nothing here is a real credential.
+    const urls = [
+      'https://api.example.test/v1?token=fake-token-456',
+      'https://api.example.test/v1#fake-token-456',
+      'https://api.example.test/v1?',
+    ];
+
+    for (const url of urls) {
+      const message = errorMessage(() => resolveApiEnvironment({ API_ENV: 'qa', API_BASE_URL: url }));
+      expect(message).toBe('API_BASE_URL must not contain a query string or fragment.');
+      for (const fragment of [url, 'fake-token-456']) {
+        expect(message).not.toContain(fragment);
+      }
+    }
+  });
+});
+
+test.describe('UI environment configuration', () => {
+  test('Defaults to the TodoMVC demo when UI_BASE_URL is not set', () => {
+    expect(resolveUiEnvironment({})).toEqual({ baseURL: 'https://demo.playwright.dev/todomvc/' });
+    expect(resolveUiEnvironment({ UI_BASE_URL: '' })).toEqual({ baseURL: 'https://demo.playwright.dev/todomvc/' });
+  });
+
+  test('UI_BASE_URL overrides the default and keeps its path', () => {
+    expect(resolveUiEnvironment({ UI_BASE_URL: 'https://qa.example.test/app/' }).baseURL).toBe('https://qa.example.test/app/');
+    expect(resolveUiEnvironment({ UI_BASE_URL: 'http://localhost:3000' }).baseURL).toBe('http://localhost:3000/');
+  });
+
+  test('A missing trailing slash is added so relative navigation keeps the full path', () => {
+    const { baseURL } = resolveUiEnvironment({ UI_BASE_URL: 'https://demo.playwright.dev/todomvc' });
+
+    expect(baseURL).toBe('https://demo.playwright.dev/todomvc/');
+    // Tests call page.goto('./'), which Playwright resolves against baseURL like this.
+    expect(new URL('./', baseURL).href).toBe('https://demo.playwright.dev/todomvc/');
+  });
+
+  test('Invalid UI_BASE_URL values are rejected without echoing them', () => {
+    // Obviously fake placeholder values; nothing here is a real credential.
+    const cases: [url: string, expected: string][] = [
+      ['not a url fake-secret-value-789', 'UI_BASE_URL is not a valid URL. The value is not shown because it may contain credentials.'],
+      ['https://fake-user:fake-pass-123@app.example.test/', 'UI_BASE_URL must not contain a username or password.'],
+      ['https://fake-user@app.example.test/', 'UI_BASE_URL must not contain a username or password.'],
+      ['https://app.example.test/?token=fake-token-456', 'UI_BASE_URL must not contain a query string or fragment.'],
+      ['https://app.example.test/#fake-token-456', 'UI_BASE_URL must not contain a query string or fragment.'],
+      ['ftp://app.example.test/', 'UI_BASE_URL must use http or https.'],
+    ];
+
+    for (const [url, expected] of cases) {
+      const message = errorMessage(() => resolveUiEnvironment({ UI_BASE_URL: url }));
+      expect(message).toBe(expected);
+      for (const fragment of [url, 'fake-user', 'fake-pass-123', 'fake-token-456', 'fake-secret-value-789']) {
         expect(message).not.toContain(fragment);
       }
     }
