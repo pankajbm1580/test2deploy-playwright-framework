@@ -9,5 +9,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["framework/**/*.ts", "api/**/*.ts", "e2e/**/*.ts", "*.config.ts"]
+  "include": ["framework/**/*.ts", "clients/**/*.ts", "*.config.ts"]
 }

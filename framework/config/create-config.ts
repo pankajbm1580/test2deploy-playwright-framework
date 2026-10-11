@@ -15,22 +15,26 @@ const outputs: Record<Suite, { report: string; results: string }> = {
 
 // Root test directory per suite; test paths in output and reports are shown relative to it.
 const rootTestDir: Record<Suite, string> = {
-  ui: './e2e',
-  api: './api/tests',
+  ui: './clients/demo/ui',
+  api: '.',
   all: '.',
 };
 
 function uiProjects(): Project[] {
   const use = { baseURL: resolveUiEnvironment().baseURL, ...uiDiagnostics() };
   return [
-    { name: 'chromium', testDir: './e2e', use: { ...devices['Desktop Chrome'], ...use } },
-    { name: 'firefox', testDir: './e2e', use: { ...devices['Desktop Firefox'], ...use } },
-    { name: 'webkit', testDir: './e2e', use: { ...devices['Desktop Safari'], ...use } },
+    { name: 'chromium', testDir: './clients/demo/ui', use: { ...devices['Desktop Chrome'], ...use } },
+    { name: 'firefox', testDir: './clients/demo/ui', use: { ...devices['Desktop Firefox'], ...use } },
+    { name: 'webkit', testDir: './clients/demo/ui', use: { ...devices['Desktop Safari'], ...use } },
   ];
 }
 
 function apiProjects(): Project[] {
-  return [{ name: 'api', testDir: './api/tests', use: { ...apiDiagnostics } }];
+  return [
+    // The framework's own self-tests (config, redaction, stub server); no browser needed.
+    { name: 'framework', testDir: './framework/tests', use: { ...apiDiagnostics } },
+    { name: 'api', testDir: './clients/demo/api/tests', use: { ...apiDiagnostics } },
+  ];
 }
 
 export function createConfig({ suite }: { suite: Suite }) {
