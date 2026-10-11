@@ -4,9 +4,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "test:ui": "playwright test",
     "test:e2e": "playwright test",
     "test:api": "playwright test -c playwright.api.config.ts",
-    "test:all": "npm run test:e2e && npm run test:api"
+    "test:all": "playwright test -c playwright.all.config.ts",
+    "typecheck": "tsc --noEmit",
+    "report:ui": "playwright show-report playwright-report",
+    "report:api": "playwright show-report playwright-report-api",
+    "report:all": "playwright show-report playwright-report-all"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +21,7 @@
     "@playwright/test": "^1.64.0",
     "@types/node": "^26.6.5",
     "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1"
+    "ajv-formats": "^3.0.1",
+    "typescript": "5.9.3"
   }
 }

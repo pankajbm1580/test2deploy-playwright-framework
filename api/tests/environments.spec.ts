@@ -1,5 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { resolveApiEnvironment } from '../config/environments';
+import { htmlReportMode, videoMode } from '../../framework/config/diagnostics';
+
+/** Runs `fn`, which must throw, and returns the error message. */
+function errorMessage(fn: () => unknown): string {
+  try {
+    fn();
+  } catch (error) {
+    return (error as Error).message;
+  }
+  throw new Error('Expected the call to throw');
+}
 
 // Pure configuration checks: each test passes its own variables, so the real environment is not used.
 test.describe('API environment configuration', () => {
@@ -32,9 +43,66 @@ test.describe('API environment configuration', () => {
 
   test('Fails fast on missing or invalid configuration', () => {
     expect(() => resolveApiEnvironment({ API_ENV: 'qa' })).toThrow(/API_BASE_URL must be set/);
-    expect(() => resolveApiEnvironment({ API_ENV: 'prod' })).toThrow(/Unknown API_ENV "prod"/);
+    expect(() => resolveApiEnvironment({ API_ENV: 'prod' })).toThrow(/API_ENV must be one of: jsonplaceholder, qa, staging/);
     expect(() => resolveApiEnvironment({ API_BASE_URL: 'not a url' })).toThrow(/not a valid URL/);
     expect(() => resolveApiEnvironment({ API_TIMEOUT_MS: '-1' })).toThrow(/positive integer/);
     expect(() => resolveApiEnvironment({ API_READ_ONLY: 'yes' })).toThrow(/"true" or "false"/);
+  });
+
+  test('An invalid API_BASE_URL error does not expose credentials or tokens', () => {
+    // Obviously fake placeholder values; nothing here is a real credential.
+    const invalidUrls = [
+      'https://fake-user:fake-pass-123@exa mple.test/api?token=fake-token-456',
+      'http://fake-user:fake-pass-123@[not-an-ipv6/?token=fake-token-456',
+    ];
+
+    for (const url of invalidUrls) {
+      let message = '';
+      try {
+        resolveApiEnvironment({ API_BASE_URL: url });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+
+      expect(message).toContain('API_BASE_URL is not a valid URL');
+      for (const fragment of [url, 'fake-user', 'fake-pass-123', 'fake-token-456']) {
+        expect(message).not.toContain(fragment);
+      }
+    }
+  });
+
+  test('Invalid configuration values are never echoed in error messages', () => {
+    // A fake value standing in for a secret pasted into the wrong variable.
+    const fakeSecret = 'fake-secret-value-789';
+    const cases: [variable: string, run: () => unknown, expected: RegExp][] = [
+      ['API_ENV', () => resolveApiEnvironment({ API_ENV: fakeSecret }), /API_ENV must be one of: jsonplaceholder, qa, staging/],
+      ['API_TIMEOUT_MS', () => resolveApiEnvironment({ API_TIMEOUT_MS: fakeSecret }), /API_TIMEOUT_MS must be a positive integer/],
+      ['API_READ_ONLY', () => resolveApiEnvironment({ API_READ_ONLY: fakeSecret }), /API_READ_ONLY must be "true" or "false"/],
+      ['PW_VIDEO', () => videoMode({ PW_VIDEO: fakeSecret }), /PW_VIDEO must be one of: off, on, retain-on-failure, on-first-retry/],
+      ['PW_HTML_REPORT', () => htmlReportMode({ PW_HTML_REPORT: fakeSecret }), /PW_HTML_REPORT must be one of: auto, always/],
+    ];
+
+    for (const [variable, run, expected] of cases) {
+      const message = errorMessage(run);
+      expect(message, variable).toMatch(expected);
+      expect(message, variable).not.toContain(fakeSecret);
+    }
+  });
+
+  test('API_BASE_URL with an embedded username or password is rejected without echoing it', () => {
+    // Obviously fake placeholder values; nothing here is a real credential.
+    const urlsWithCredentials = [
+      'https://fake-user:fake-pass-123@api.example.test/v1',
+      'https://fake-user@api.example.test/v1',
+      'https://:fake-pass-123@api.example.test/v1',
+    ];
+
+    for (const url of urlsWithCredentials) {
+      const message = errorMessage(() => resolveApiEnvironment({ API_ENV: 'qa', API_BASE_URL: url }));
+      expect(message).toBe('API_BASE_URL must not contain a username or password. Use API_TOKEN for authentication.');
+      for (const fragment of [url, 'fake-user', 'fake-pass-123']) {
+        expect(message).not.toContain(fragment);
+      }
+    }
   });
 });

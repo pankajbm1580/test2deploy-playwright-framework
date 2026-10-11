@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 
@@ -5,6 +6,7 @@ import type { AddressInfo } from 'node:net';
  * Minimal local HTTP server for deterministic error and timeout scenarios:
  *   GET /status/:code  -> responds with that status and a JSON error body
  *   GET /delay/:ms     -> responds 200 after the given delay
+ *   GET /auth-hash     -> responds 200 with a SHA-256 hash of the Authorization header
  *   GET /malformed     -> responds 200 with an invalid JSON body
  * Anything else       -> 404
  */
@@ -35,6 +37,14 @@ export async function startStubServer(): Promise<StubServer> {
         res.end(JSON.stringify({ delayedMs: ms }));
       }, ms);
       res.on('close', () => clearTimeout(timer));
+      return;
+    }
+
+    if (pathname === '/auth-hash') {
+      // Returns a hash, never the header itself, so tests can verify the token without exposing it.
+      const authorization = req.headers.authorization ?? '';
+      res.writeHead(200, jsonHeaders);
+      res.end(JSON.stringify({ sha256: createHash('sha256').update(authorization).digest('hex') }));
       return;
     }
 

@@ -13,6 +13,8 @@ node_modules/
 # API test output
 /test-results-api/
 /playwright-report-api/
+/test-results-all/
+/playwright-report-all/
 
 # Environment files (keep the committed template)
 .env.*

@@ -1,7 +1,24 @@
-import { test as base, expect as baseExpect, type APIRequestContext } from '@playwright/test';
+import { test as base, expect as baseExpect, type APIRequest, type APIRequestContext } from '@playwright/test';
 import { resolveApiEnvironment, type ApiEnvironment } from '../config/environments';
 import { startStubServer, type StubServer } from '../support/stub-server';
 import { schemaMatchers } from '../support/schema';
+import { withRedactedErrors } from '../support/redact';
+
+/**
+ * Creates the request context for an API environment. Errors from it never contain the token:
+ * Playwright's API error call logs include request headers, so they are redacted here.
+ */
+export async function newApiContext(request: APIRequest, apiEnv: ApiEnvironment): Promise<APIRequestContext> {
+  const context = await request.newContext({
+    baseURL: apiEnv.baseURL,
+    timeout: apiEnv.timeoutMs,
+    extraHTTPHeaders: {
+      Accept: 'application/json',
+      ...(apiEnv.token ? { Authorization: `Bearer ${apiEnv.token}` } : {}),
+    },
+  });
+  return withRedactedErrors(context, [apiEnv.token]);
+}
 
 type TestFixtures = {
   /** Request context for the configured API environment (base URL, timeout, optional auth). */
@@ -33,14 +50,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   ],
 
   api: async ({ playwright, apiEnv }, use) => {
-    const context = await playwright.request.newContext({
-      baseURL: apiEnv.baseURL,
-      timeout: apiEnv.timeoutMs,
-      extraHTTPHeaders: {
-        Accept: 'application/json',
-        ...(apiEnv.token ? { Authorization: `Bearer ${apiEnv.token}` } : {}),
-      },
-    });
+    const context = await newApiContext(playwright.request, apiEnv);
     await use(context);
     await context.dispose();
   },
