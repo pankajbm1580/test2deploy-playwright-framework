@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { test, expect, newApiContext } from '../fixtures/api';
-import { resolveApiEnvironment } from '../config/environments';
+import { resolveApiEnvironment } from './support/test-client';
 
 // Playwright's API error call logs include request headers. These tests prove the API_TOKEN
 // sent in the Authorization header is masked in errors. Runs against the local stub server.

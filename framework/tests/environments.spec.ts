@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { resolveApiEnvironment, resolveUiEnvironment } from '../config/environments';
+import { resolveApiEnvironment, resolveUiEnvironment } from './support/test-client';
 import { htmlReportMode, videoMode } from '../config/diagnostics';
 
 /** Runs `fn`, which must throw, and returns the error message. */
@@ -14,16 +14,6 @@ function errorMessage(fn: () => unknown): string {
 
 // Pure configuration checks: each test passes its own variables, so the real environment is not used.
 test.describe('API environment configuration', () => {
-  test('Defaults to JSONPlaceholder when no variables are set', () => {
-    expect(resolveApiEnvironment({})).toEqual({
-      name: 'jsonplaceholder',
-      baseURL: 'https://jsonplaceholder.typicode.com',
-      timeoutMs: 10_000,
-      token: undefined,
-      readOnly: false,
-    });
-  });
-
   test('Variables override the preset for a client environment', () => {
     const env = resolveApiEnvironment({
       API_ENV: 'staging',
@@ -124,11 +114,6 @@ test.describe('API environment configuration', () => {
 });
 
 test.describe('UI environment configuration', () => {
-  test('Defaults to the TodoMVC demo when UI_BASE_URL is not set', () => {
-    expect(resolveUiEnvironment({})).toEqual({ baseURL: 'https://demo.playwright.dev/todomvc/' });
-    expect(resolveUiEnvironment({ UI_BASE_URL: '' })).toEqual({ baseURL: 'https://demo.playwright.dev/todomvc/' });
-  });
-
   test('UI_BASE_URL overrides the default and keeps its path', () => {
     expect(resolveUiEnvironment({ UI_BASE_URL: 'https://qa.example.test/app/' }).baseURL).toBe('https://qa.example.test/app/');
     expect(resolveUiEnvironment({ UI_BASE_URL: 'http://localhost:3000' }).baseURL).toBe('http://localhost:3000/');

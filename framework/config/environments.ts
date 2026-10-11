@@ -1,13 +1,15 @@
 import { parseBaseUrl } from './base-url';
+import type { ClientConfig } from './client';
 
 /**
  * Resolves which UI and API environments the tests run against.
  *
- * Everything comes from environment variables (or a local, git-ignored .env file),
+ * Defaults and environment presets come from the client configuration (see client.ts);
+ * everything else comes from environment variables (or a local, git-ignored .env file),
  * never from source code:
- *   UI_BASE_URL     app under test for the browser suite (default: the TodoMVC demo)
- *   API_ENV         jsonplaceholder (default) | qa | staging
- *   API_BASE_URL    overrides the preset base URL; required for qa and staging
+ *   UI_BASE_URL     app under test for the browser suite (default: the client's ui.defaultBaseURL)
+ *   API_ENV         one of the client's api.environments (default: api.defaultEnvironment)
+ *   API_BASE_URL    overrides the preset base URL; required when the preset has none
  *   API_TOKEN       optional; sent as "Authorization: Bearer <token>"
  *   API_TIMEOUT_MS  per-request timeout in ms (default 10000)
  *   API_READ_ONLY   "true"/"false"; overrides whether write tests are allowed
@@ -18,48 +20,32 @@ export interface UiEnvironment {
   baseURL: string;
 }
 
-const DEFAULT_UI_BASE_URL = 'https://demo.playwright.dev/todomvc/';
-
-export function resolveUiEnvironment(env: NodeJS.ProcessEnv = process.env): UiEnvironment {
-  const url = parseBaseUrl('UI_BASE_URL', env.UI_BASE_URL || DEFAULT_UI_BASE_URL);
+export function resolveUiEnvironment(env: NodeJS.ProcessEnv, ui: ClientConfig['ui']): UiEnvironment {
+  const url = parseBaseUrl('UI_BASE_URL', env.UI_BASE_URL || ui.defaultBaseURL);
   // Tests navigate with page.goto('./'), which resolves against the last path segment,
-  // so the base URL must end with "/" to keep its full path (e.g. /todomvc/).
+  // so the base URL must end with "/" to keep its full path (e.g. /app/).
   if (!url.pathname.endsWith('/')) url.pathname += '/';
   return { baseURL: url.href };
 }
 
-export type ApiEnvironmentName = 'jsonplaceholder' | 'qa' | 'staging';
-
 export interface ApiEnvironment {
-  name: ApiEnvironmentName;
+  name: string;
   baseURL: string;
   timeoutMs: number;
   token: string | undefined;
   readOnly: boolean;
 }
 
-interface Preset {
-  baseURL?: string;
-  readOnly: boolean;
-}
-
-const presets: Record<ApiEnvironmentName, Preset> = {
-  jsonplaceholder: { baseURL: 'https://jsonplaceholder.typicode.com', readOnly: false },
-  // Client-approved environments: URLs are supplied via API_BASE_URL, not committed.
-  qa: { readOnly: false },
-  staging: { readOnly: true },
-};
-
 const DEFAULT_TIMEOUT_MS = 10_000;
 
-export function resolveApiEnvironment(env: NodeJS.ProcessEnv = process.env): ApiEnvironment {
+export function resolveApiEnvironment(env: NodeJS.ProcessEnv, api: ClientConfig['api']): ApiEnvironment {
   // Error messages name the variable and the expected format but never echo the supplied
   // value: a secret pasted into the wrong variable must not end up in logs or reports.
-  const name = (env.API_ENV || 'jsonplaceholder') as ApiEnvironmentName;
-  if (!Object.hasOwn(presets, name)) {
-    throw new Error(`API_ENV must be one of: ${Object.keys(presets).join(', ')}.`);
+  const name = env.API_ENV || api.defaultEnvironment;
+  if (!Object.hasOwn(api.environments, name)) {
+    throw new Error(`API_ENV must be one of: ${Object.keys(api.environments).join(', ')}.`);
   }
-  const preset = presets[name];
+  const preset = api.environments[name];
 
   const baseURL = env.API_BASE_URL || preset.baseURL;
   if (!baseURL) {

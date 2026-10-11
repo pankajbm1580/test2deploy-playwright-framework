@@ -1,4 +1,5 @@
 import { test as base, expect as baseExpect, type APIRequest, type APIRequestContext } from '@playwright/test';
+import type { ClientConfig } from '../config/client';
 import { resolveApiEnvironment, type ApiEnvironment } from '../config/environments';
 import { startStubServer, type StubServer } from '../support/stub-server';
 import { schemaMatchers } from '../support/schema';
@@ -27,15 +28,25 @@ type TestFixtures = {
   stubApi: APIRequestContext;
 };
 
-type WorkerFixtures = {
+/** Set per project by createConfig(): the client's API settings (never the token). */
+export type ApiFixtureOptions = {
+  apiClient: ClientConfig['api'] | undefined;
+};
+
+type WorkerFixtures = ApiFixtureOptions & {
   apiEnv: ApiEnvironment;
   stubServer: StubServer;
 };
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  apiClient: [undefined, { scope: 'worker', option: true }],
+
   apiEnv: [
-    async ({}, use) => {
-      await use(resolveApiEnvironment());
+    async ({ apiClient }, use) => {
+      if (!apiClient) {
+        throw new Error('The api fixture needs client settings: this project has no apiClient option. Pass a client to createConfig().');
+      }
+      await use(resolveApiEnvironment(process.env, apiClient));
     },
     { scope: 'worker' },
   ],

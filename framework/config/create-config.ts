@@ -1,7 +1,9 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
 import { loadEnvFile } from './load-env';
 import { apiDiagnostics, htmlReportEnabled, htmlReportMode, reporters, uiDiagnostics } from './diagnostics';
+import type { ClientConfig } from './client';
 import { resolveApiEnvironment, resolveUiEnvironment } from './environments';
+import type { ApiFixtureOptions } from '../fixtures/api';
 
 export type Suite = 'ui' | 'api' | 'all';
 
@@ -14,36 +16,36 @@ const outputs: Record<Suite, { report: string; results: string }> = {
 };
 
 // Root test directory per suite; test paths in output and reports are shown relative to it.
-const rootTestDir: Record<Suite, string> = {
-  ui: './clients/demo/ui',
-  api: '.',
-  all: '.',
-};
+function rootTestDir(suite: Suite, client: ClientConfig): string {
+  return suite === 'ui' ? `${client.dir}/ui` : '.';
+}
 
-function uiProjects(): Project[] {
-  const use = { baseURL: resolveUiEnvironment().baseURL, ...uiDiagnostics() };
+function uiProjects(client: ClientConfig): Project[] {
+  const testDir = `${client.dir}/ui`;
+  const use = { baseURL: resolveUiEnvironment(process.env, client.ui).baseURL, ...uiDiagnostics() };
   return [
-    { name: 'chromium', testDir: './clients/demo/ui', use: { ...devices['Desktop Chrome'], ...use } },
-    { name: 'firefox', testDir: './clients/demo/ui', use: { ...devices['Desktop Firefox'], ...use } },
-    { name: 'webkit', testDir: './clients/demo/ui', use: { ...devices['Desktop Safari'], ...use } },
+    { name: 'chromium', testDir, use: { ...devices['Desktop Chrome'], ...use } },
+    { name: 'firefox', testDir, use: { ...devices['Desktop Firefox'], ...use } },
+    { name: 'webkit', testDir, use: { ...devices['Desktop Safari'], ...use } },
   ];
 }
 
-function apiProjects(): Project[] {
+function apiProjects(client: ClientConfig): Project<{}, ApiFixtureOptions>[] {
   return [
-    // The framework's own self-tests (config, redaction, stub server); no browser needed.
+    // The framework's own self-tests (config, redaction, stub server); no browser and no client needed.
     { name: 'framework', testDir: './framework/tests', use: { ...apiDiagnostics } },
-    { name: 'api', testDir: './clients/demo/api/tests', use: { ...apiDiagnostics } },
+    // Client settings only (no token): the api fixture resolves API_* variables against them.
+    { name: 'api', testDir: `${client.dir}/api/tests`, use: { ...apiDiagnostics, apiClient: client.api } },
   ];
 }
 
-export function createConfig({ suite }: { suite: Suite }) {
+export function createConfig({ suite, client }: { suite: Suite; client: ClientConfig }) {
   loadEnvFile();
 
   // Validate configuration up front so a misconfigured run fails before any test starts.
   // Each suite checks only the variables it uses, so a bad UI_BASE_URL never blocks API runs.
-  if (suite !== 'api') resolveUiEnvironment();
-  if (suite !== 'ui') resolveApiEnvironment();
+  if (suite !== 'api') resolveUiEnvironment(process.env, client.ui);
+  if (suite !== 'ui') resolveApiEnvironment(process.env, client.api);
 
   // Explain the HTML report decision once, from the main process only (workers also load the config).
   if (suite !== 'ui' && process.env.API_TOKEN && !process.env.TEST_WORKER_INDEX) {
@@ -57,7 +59,7 @@ export function createConfig({ suite }: { suite: Suite }) {
   const isCI = !!process.env.CI;
 
   return defineConfig({
-    testDir: rootTestDir[suite],
+    testDir: rootTestDir(suite, client),
     fullyParallel: true,
     forbidOnly: isCI,
     retries: isCI ? 2 : 0,
@@ -65,8 +67,8 @@ export function createConfig({ suite }: { suite: Suite }) {
     reporter: reporters(suite, outputs[suite].report),
     outputDir: outputs[suite].results,
     projects: [
-      ...(suite !== 'api' ? uiProjects() : []),
-      ...(suite !== 'ui' ? apiProjects() : []),
+      ...(suite !== 'api' ? uiProjects(client) : []),
+      ...(suite !== 'ui' ? apiProjects(client) : []),
     ],
   });
 }
