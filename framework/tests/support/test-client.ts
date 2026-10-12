@@ -28,5 +28,5 @@ export const testClient = defineClient({
 });
 
 /** The framework resolvers, bound to the test client. */
-export const resolveApiEnvironment = (env: NodeJS.ProcessEnv): ApiEnvironment => resolveApi(env, testClient.api);
-export const resolveUiEnvironment = (env: NodeJS.ProcessEnv): UiEnvironment => resolveUi(env, testClient.ui);
+export const resolveApiEnvironment = (env: NodeJS.ProcessEnv): ApiEnvironment => resolveApi(env, testClient);
+export const resolveUiEnvironment = (env: NodeJS.ProcessEnv): UiEnvironment => resolveUi(env, testClient);

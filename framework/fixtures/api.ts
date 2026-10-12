@@ -4,6 +4,7 @@ import { resolveApiEnvironment, type ApiEnvironment } from '../config/environmen
 import { startStubServer, type StubServer } from '../support/stub-server';
 import { schemaMatchers } from '../support/schema';
 import { withRedactedErrors } from '../support/redact';
+import { withWritesBlocked } from '../support/read-only';
 
 /**
  * Creates the request context for an API environment. Errors from it never contain the token:
@@ -18,7 +19,9 @@ export async function newApiContext(request: APIRequest, apiEnv: ApiEnvironment)
       ...(apiEnv.token ? { Authorization: `Bearer ${apiEnv.token}` } : {}),
     },
   });
-  return withRedactedErrors(context, [apiEnv.token]);
+  const redacted = withRedactedErrors(context, [apiEnv.token]);
+  // Read-only environments (including every production run) reject write requests outright.
+  return apiEnv.readOnly ? withWritesBlocked(redacted, apiEnv.name) : redacted;
 }
 
 type TestFixtures = {
@@ -28,9 +31,9 @@ type TestFixtures = {
   stubApi: APIRequestContext;
 };
 
-/** Set per project by createConfig(): the client's API settings (never the token). */
+/** Set per project by createConfig(): the client's settings (never tokens or credentials). */
 export type ApiFixtureOptions = {
-  apiClient: ClientConfig['api'] | undefined;
+  client: ClientConfig | undefined;
 };
 
 type WorkerFixtures = ApiFixtureOptions & {
@@ -39,14 +42,14 @@ type WorkerFixtures = ApiFixtureOptions & {
 };
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
-  apiClient: [undefined, { scope: 'worker', option: true }],
+  client: [undefined, { scope: 'worker', option: true }],
 
   apiEnv: [
-    async ({ apiClient }, use) => {
-      if (!apiClient) {
-        throw new Error('The api fixture needs client settings: this project has no apiClient option. Pass a client to createConfig().');
+    async ({ client }, use) => {
+      if (!client) {
+        throw new Error('The api fixture needs client settings: this project has no client option. Pass a client to createConfig().');
       }
-      await use(resolveApiEnvironment(process.env, apiClient));
+      await use(resolveApiEnvironment(process.env, client));
     },
     { scope: 'worker' },
   ],

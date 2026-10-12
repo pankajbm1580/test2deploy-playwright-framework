@@ -22,7 +22,7 @@ function rootTestDir(suite: Suite, client: ClientConfig): string {
 
 function uiProjects(client: ClientConfig): Project[] {
   const testDir = `${client.dir}/ui`;
-  const use = { baseURL: resolveUiEnvironment(process.env, client.ui).baseURL, ...uiDiagnostics() };
+  const use = { baseURL: resolveUiEnvironment(process.env, client).baseURL, ...uiDiagnostics() };
   return [
     { name: 'chromium', testDir, use: { ...devices['Desktop Chrome'], ...use } },
     { name: 'firefox', testDir, use: { ...devices['Desktop Firefox'], ...use } },
@@ -35,7 +35,7 @@ function apiProjects(client: ClientConfig): Project<{}, ApiFixtureOptions>[] {
     // The framework's own self-tests (config, redaction, stub server); no browser and no client needed.
     { name: 'framework', testDir: './framework/tests', use: { ...apiDiagnostics } },
     // Client settings only (no token): the api fixture resolves API_* variables against them.
-    { name: 'api', testDir: `${client.dir}/api/tests`, use: { ...apiDiagnostics, apiClient: client.api } },
+    { name: 'api', testDir: `${client.dir}/api/tests`, use: { ...apiDiagnostics, client } },
   ];
 }
 
@@ -44,8 +44,13 @@ export function createConfig({ suite, client }: { suite: Suite; client: ClientCo
 
   // Validate configuration up front so a misconfigured run fails before any test starts.
   // Each suite checks only the variables it uses, so a bad UI_BASE_URL never blocks API runs.
-  if (suite !== 'api') resolveUiEnvironment(process.env, client.ui);
-  if (suite !== 'ui') resolveApiEnvironment(process.env, client.api);
+  // This also runs the production guard, so an unconfirmed production run never starts.
+  if (suite !== 'api') resolveUiEnvironment(process.env, client);
+  if (suite !== 'ui') resolveApiEnvironment(process.env, client);
+
+  if (process.env.ALLOW_PRODUCTION === 'true' && !process.env.TEST_WORKER_INDEX) {
+    console.warn('[config] ALLOW_PRODUCTION=true: production targets are allowed for this run. Production API runs are read-only.');
+  }
 
   // Explain the HTML report decision once, from the main process only (workers also load the config).
   if (suite !== 'ui' && process.env.API_TOKEN && !process.env.TEST_WORKER_INDEX) {

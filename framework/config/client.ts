@@ -13,6 +13,8 @@ export interface ApiEnvironmentPreset {
   baseURL?: string;
   /** Whether write (POST/PUT/PATCH/DELETE) tests are skipped. API_READ_ONLY overrides it. */
   readOnly: boolean;
+  /** Marks a production environment: runs need ALLOW_PRODUCTION=true and are always read-only. */
+  production?: boolean;
 }
 
 export interface ClientConfig {
@@ -24,6 +26,12 @@ export interface ClientConfig {
     /** Used when UI_BASE_URL is not set. */
     defaultBaseURL: string;
   };
+  /**
+   * Hostnames of production systems, e.g. ['example.com']. A listed host also covers its
+   * subdomains (app.example.com, api.example.com). Any UI_BASE_URL or API_BASE_URL on these
+   * hosts is treated as production, whatever API_ENV says.
+   */
+  productionHosts?: readonly string[];
   api: {
     /** Used when API_ENV is not set. Must be one of `environments`. */
     defaultEnvironment: string;
@@ -53,7 +61,36 @@ export function defineClient<T extends ClientConfig>(client: T): T {
   }
   for (const [name, preset] of Object.entries(client.api.environments)) {
     if (preset.baseURL !== undefined) parseBaseUrl(`${label} api.environments.${name}.baseURL`, preset.baseURL);
+    if (preset.production && !preset.readOnly) {
+      throw new Error(`${label}: api.environments.${name} is a production environment and must set readOnly: true.`);
+    }
+  }
+
+  // Fail closed: a malformed entry would silently never match, so reject it.
+  for (const host of client.productionHosts ?? []) {
+    if (normalizeHost(host) === undefined) {
+      throw new Error(`${label}: productionHosts entries must be plain hostnames such as "example.com", without a scheme, port or path.`);
+    }
   }
 
   return client;
+}
+
+/** Lowercase, punycode-normalised hostname, or undefined if `host` is not a plain hostname. */
+function normalizeHost(host: string): string | undefined {
+  if (!/^[a-z0-9.-]+$/i.test(host) || host.startsWith('.') || host.includes('..')) return undefined;
+  try {
+    return new URL(`http://${host}`).hostname.replace(/\.$/, '');
+  } catch {
+    return undefined;
+  }
+}
+
+/** Whether `url` is on one of the client's production hosts (or a subdomain of one). */
+export function isProductionHost(url: URL, productionHosts: readonly string[] = []): boolean {
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+  return productionHosts.some((entry) => {
+    const host = normalizeHost(entry);
+    return host !== undefined && (hostname === host || hostname.endsWith(`.${host}`));
+  });
 }

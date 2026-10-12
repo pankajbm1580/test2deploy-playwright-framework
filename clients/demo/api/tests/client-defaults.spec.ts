@@ -4,8 +4,8 @@ import { demoClient } from '../../client.config';
 
 // The demo client's defaults, moved here from the framework tests when the defaults moved
 // out of framework/ into clients/demo/client.config.ts. Test names and assertions are unchanged.
-const resolveApiEnvironment = (env: NodeJS.ProcessEnv) => resolveApi(env, demoClient.api);
-const resolveUiEnvironment = (env: NodeJS.ProcessEnv) => resolveUi(env, demoClient.ui);
+const resolveApiEnvironment = (env: NodeJS.ProcessEnv) => resolveApi(env, demoClient);
+const resolveUiEnvironment = (env: NodeJS.ProcessEnv) => resolveUi(env, demoClient);
 
 test.describe('API environment configuration', () => {
   test('Defaults to JSONPlaceholder when no variables are set', () => {
