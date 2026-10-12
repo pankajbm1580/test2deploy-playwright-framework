@@ -3,6 +3,7 @@ import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { defineClient, type ClientConfig } from '../config/client';
 import { resolveApiEnvironment, resolveUiEnvironment, testClient } from './support/test-client';
+import { fakeSecret } from './support/fake-secrets';
 
 /** Runs `fn`, which must throw, and returns the error message. */
 function errorMessage(fn: () => unknown): string {
@@ -44,7 +45,8 @@ test.describe('Client configuration', () => {
 
   test('Invalid client URLs are rejected without echoing them', () => {
     // Obviously fake placeholder values; nothing here is a real credential.
-    const badUrl = 'https://fake-user:fake-pass-123@app.example.test/';
+    const fake = { user: fakeSecret('user'), pass: fakeSecret('pass') };
+    const badUrl = `https://${fake.user}:${fake.pass}@app.example.test/`;
     const uiMessage = errorMessage(() => defineClient({ ...validClient(), ui: { defaultBaseURL: badUrl } }));
     const apiMessage = errorMessage(() =>
       defineClient({ ...validClient(), api: { defaultEnvironment: 'qa', environments: { qa: { baseURL: badUrl, readOnly: false } } } }),
@@ -53,7 +55,7 @@ test.describe('Client configuration', () => {
     expect(uiMessage).toBe('Client "sample" ui.defaultBaseURL must not contain a username or password.');
     expect(apiMessage).toBe('Client "sample" api.environments.qa.baseURL must not contain a username or password.');
     for (const message of [uiMessage, apiMessage]) {
-      for (const fragment of [badUrl, 'fake-user', 'fake-pass-123']) expect(message).not.toContain(fragment);
+      for (const fragment of [badUrl, fake.user, fake.pass]) expect(message).not.toContain(fragment);
     }
   });
 

@@ -1,6 +1,11 @@
 import { test, expect, newApiContext } from '../fixtures/api';
 import { defineClient, isProductionHost, type ClientConfig } from '../config/client';
 import { resolveApiEnvironment, resolveUiEnvironment } from '../config/environments';
+import { fakeSecret } from './support/fake-secrets';
+
+// Obviously fake values, built at runtime (support/fake-secrets.ts) so they never appear in source
+// lines that reports quote as snippets: a marker found in a report is then always a real leak.
+const fake = { value: fakeSecret('value'), path: fakeSecret('path') };
 
 /** Runs `fn`, which must throw, and returns the error message. */
 function errorMessage(fn: () => unknown): string {
@@ -84,7 +89,7 @@ test.describe('Production guard', () => {
   });
 
   test('Fails closed on an invalid ALLOW_PRODUCTION value, without echoing it', () => {
-    const fakeValue = 'fake-secret-value-789';
+    const fakeValue = fake.value;
     for (const run of [() => api({ ALLOW_PRODUCTION: fakeValue }), () => ui({ ALLOW_PRODUCTION: 'yes' })]) {
       const message = errorMessage(run);
       expect(message).toBe('ALLOW_PRODUCTION must be "true" or "false", or left unset.');
@@ -93,13 +98,13 @@ test.describe('Production guard', () => {
   });
 
   test('Guard errors never echo the target URL', () => {
-    const url = 'https://api.example-prod.test/fake-path-789';
+    const url = `https://api.example-prod.test/${fake.path}`;
     const messages = [
       errorMessage(() => api({ API_ENV: 'qa', API_BASE_URL: url })),
       errorMessage(() => ui({ UI_BASE_URL: url })),
     ];
     for (const message of messages) {
-      for (const fragment of [url, 'example-prod', 'fake-path-789']) expect(message).not.toContain(fragment);
+      for (const fragment of [url, 'example-prod', fake.path]) expect(message).not.toContain(fragment);
     }
   });
 
@@ -158,7 +163,7 @@ test.describe('Read-only write blocking', () => {
   });
 
   test('Write blocking keeps token redaction working', async ({ playwright, stubServer }) => {
-    const fakeToken = 'fake-token-marker-789';
+    const fakeToken = fakeSecret('token');
     const context = await newApiContext(playwright.request, readOnlyEnv(stubServer.baseURL, fakeToken));
     try {
       const blocked: Error = await context.post('/status/201').then(

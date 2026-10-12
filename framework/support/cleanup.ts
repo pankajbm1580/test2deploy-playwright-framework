@@ -1,4 +1,5 @@
 import type { APIRequestContext } from '@playwright/test';
+import { redactText, sanitizeError, sanitizePath } from './sanitize';
 
 interface CleanupStep {
   label: string;
@@ -9,7 +10,8 @@ interface CleanupStep {
  * Collects undo steps for test data a test creates, and runs them after the test.
  * Steps run newest first (children before parents). Every step runs even if an earlier
  * one fails; failures are reported together as one error naming each step by its label.
- * Labels and statuses go into errors, never request headers, so tokens stay out of reports.
+ * Labels and statuses go into errors, never request headers. Labels and step errors are
+ * redacted (sensitive query parameters, cookies, tokens), since errors reach every report.
  */
 export class CleanupRegistry {
   private steps: CleanupStep[] = [];
@@ -25,7 +27,7 @@ export class CleanupRegistry {
   delete(path: string): void {
     const api = this.api;
     if (!api) throw new Error('cleanup.delete() needs an API request context.');
-    this.add(`DELETE ${path}`, async () => {
+    this.add(`DELETE ${sanitizePath(path)}`, async () => {
       const response = await api.delete(path);
       if (!response.ok() && response.status() !== 404) {
         throw new Error(`responded ${response.status()} ${response.statusText()}`);
@@ -43,7 +45,8 @@ export class CleanupRegistry {
       try {
         await fn();
       } catch (error) {
-        failures.push(`  - ${label}: ${error instanceof Error ? error.message : String(error)}`);
+        const message = sanitizeError(error instanceof Error ? error.message : String(error));
+        failures.push(`  - ${redactText(label)}: ${message}`);
       }
     }
     if (failures.length > 0) {

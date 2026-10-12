@@ -1,7 +1,8 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
 import { loadEnvFile } from './load-env';
-import { apiDiagnostics, htmlReportEnabled, htmlReportMode, reporters, uiDiagnostics } from './diagnostics';
+import { apiCallsMode, apiDiagnostics, htmlReportEnabled, htmlReportMode, redactingReporter, reporters, uiDiagnostics } from './diagnostics';
 import type { ClientConfig } from './client';
+import { assertSafeReporterCommandLine, reporterGuardPath } from './reporter-guard';
 import { resolveApiEnvironment, resolveUiEnvironment } from './environments';
 import type { ApiFixtureOptions } from '../fixtures/api';
 
@@ -40,13 +41,20 @@ function apiProjects(client: ClientConfig): Project<{}, ApiFixtureOptions>[] {
 }
 
 export function createConfig({ suite, client }: { suite: Suite; client: ClientConfig }) {
+  // Before any reporter starts: refuse a --reporter override that drops the redacting reporter,
+  // and reporters that would write files during a --list run.
+  assertSafeReporterCommandLine();
+
   loadEnvFile();
 
   // Validate configuration up front so a misconfigured run fails before any test starts.
   // Each suite checks only the variables it uses, so a bad UI_BASE_URL never blocks API runs.
   // This also runs the production guard, so an unconfirmed production run never starts.
   if (suite !== 'api') resolveUiEnvironment(process.env, client);
-  if (suite !== 'ui') resolveApiEnvironment(process.env, client);
+  if (suite !== 'ui') {
+    resolveApiEnvironment(process.env, client);
+    apiCallsMode();
+  }
 
   if (process.env.ALLOW_PRODUCTION === 'true' && !process.env.TEST_WORKER_INDEX) {
     console.warn('[config] ALLOW_PRODUCTION=true: production targets are allowed for this run. Production API runs are read-only.');
@@ -69,7 +77,11 @@ export function createConfig({ suite, client }: { suite: Suite; client: ClientCo
     forbidOnly: isCI,
     retries: isCI ? 2 : 0,
     workers: isCI ? 1 : undefined,
-    reporter: reporters(suite, outputs[suite].report),
+    // The redacting reporter goes first: it masks secrets and cookies in Playwright's own
+    // results before the list, HTML and JUnit reporters see them.
+    reporter: [redactingReporter, ...reporters(suite, outputs[suite].report)],
+    // Backstop: refuses the run if the reporters it resolved do not start with the redacting reporter.
+    globalSetup: reporterGuardPath,
     outputDir: outputs[suite].results,
     projects: [
       ...(suite !== 'api' ? uiProjects(client) : []),

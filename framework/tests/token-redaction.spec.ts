@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 import { test, expect, newApiContext } from '../fixtures/api';
 import { resolveApiEnvironment } from './support/test-client';
+import { fakeSecret } from './support/fake-secrets';
 
 // Playwright's API error call logs include request headers. These tests prove the API_TOKEN
 // sent in the Authorization header is masked in errors. Runs against the local stub server.
 test.describe('API token redaction', () => {
   // Obviously fake placeholder; nothing here is a real credential.
-  const fakeToken = 'fake-token-marker-789';
+  const fakeToken = fakeSecret('token');
 
   test('Request errors never contain the API token', async ({ playwright, stubServer }) => {
     const apiEnv = resolveApiEnvironment({ API_ENV: 'qa', API_BASE_URL: stubServer.baseURL, API_TOKEN: fakeToken });

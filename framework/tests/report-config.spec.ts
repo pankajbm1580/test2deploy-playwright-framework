@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { reporters } from '../config/diagnostics';
+import { fakeSecret } from './support/fake-secrets';
 
 // Pure configuration checks: each test passes its own variables, so the real environment is not used.
 test.describe('Report configuration', () => {
   // Obviously fake placeholder; nothing here is a real credential.
-  const fakeToken = 'fake-token-marker-789';
+  const fakeToken = fakeSecret('token');
 
   const reporterNames = (...args: Parameters<typeof reporters>) => reporters(...args).map(([name]) => name);
 

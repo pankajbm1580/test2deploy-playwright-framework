@@ -16,6 +16,10 @@ node_modules/
 /test-results-all/
 /playwright-report-all/
 
+# Redaction check output (npm run verify:redaction)
+/test-results-verification/
+/playwright-report-verification/
+
 # Environment files (keep the committed template)
 .env.*
 !.env.example

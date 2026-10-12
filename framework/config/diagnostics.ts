@@ -1,5 +1,25 @@
+import path from 'node:path';
 import type { PlaywrightTestConfig, ReporterDescription } from '@playwright/test';
 import type { Suite } from './create-config';
+
+/**
+ * Masks secrets and cookies in Playwright's own results (step errors with call logs, test
+ * errors, step titles, stdout) before other reporters write them. Must be listed first;
+ * framework/config/reporter-guard.ts refuses runs where it is not. It does not redact live
+ * terminal output.
+ */
+export const redactingReporterPath = path.join(__dirname, '../reporters/redacting-reporter.ts');
+export const redactingReporter: ReporterDescription = [redactingReporterPath];
+
+/**
+ * Whether this is a `playwright test --list` run. Playwright still runs the configured
+ * reporters when listing, so the HTML and JUnit reporters would replace existing reports
+ * with empty ones; list runs therefore only print the test list.
+ */
+export function listOnly(argv: readonly string[] = process.argv): boolean {
+  const end = argv.indexOf('--'); // Arguments after "--" are file filters, not options.
+  return (end < 0 ? argv : argv.slice(0, end)).includes('--list');
+}
 
 /**
  * Shared failure diagnostics for every suite.
@@ -9,6 +29,7 @@ import type { Suite } from './create-config';
  *
  * API traces stay off: they would record request headers such as Authorization.
  * For the same reason, the HTML report is skipped when a run sends API_TOKEN (see below).
+ * Instead, a failed API test gets a redacted "api-calls" attachment (see PW_API_CALLS).
  */
 
 const videoModes = ['off', 'on', 'retain-on-failure', 'on-first-retry'] as const;
@@ -34,6 +55,21 @@ export const apiDiagnostics: PlaywrightTestConfig['use'] = {
   trace: 'off',
 };
 
+const apiCallsModes = ['on-failure', 'off'] as const;
+type ApiCallsMode = (typeof apiCallsModes)[number];
+
+/**
+ * Whether failed API tests get an "api-calls" attachment with their last 20 calls, redacted
+ * (framework/support/sanitize.ts). PW_API_CALLS=off disables it; the default is on-failure.
+ */
+export function apiCallsMode(env: NodeJS.ProcessEnv = process.env): ApiCallsMode {
+  const value = env.PW_API_CALLS || 'on-failure';
+  if (!(apiCallsModes as readonly string[]).includes(value)) {
+    throw new Error(`PW_API_CALLS must be one of: ${apiCallsModes.join(', ')}.`);
+  }
+  return value as ApiCallsMode;
+}
+
 const htmlReportModes = ['auto', 'always'] as const;
 type HtmlReportMode = (typeof htmlReportModes)[number];
 
@@ -56,8 +92,17 @@ export function htmlReportEnabled(suite: Suite, env: NodeJS.ProcessEnv = process
   return !sendsApiToken || mode === 'always';
 }
 
-/** list + HTML (when safe; never auto-opened, so no report server is started) + JUnit for CI. */
-export function reporters(suite: Suite, htmlFolder: string, env: NodeJS.ProcessEnv = process.env): ReporterDescription[] {
+/**
+ * list + HTML (when safe; never auto-opened, so no report server is started) + JUnit for CI.
+ * A --list run gets the list reporter only, so it never overwrites existing reports.
+ */
+export function reporters(
+  suite: Suite,
+  htmlFolder: string,
+  env: NodeJS.ProcessEnv = process.env,
+  argv: readonly string[] = process.argv,
+): ReporterDescription[] {
+  if (listOnly(argv)) return [['list']];
   return [
     ['list'],
     ...(htmlReportEnabled(suite, env)

@@ -6,6 +6,16 @@ import { schemaMatchers } from '../support/schema';
 import { withRedactedErrors } from '../support/redact';
 import { withWritesBlocked } from '../support/read-only';
 import { CleanupRegistry } from '../support/cleanup';
+import { ApiCallRecorder, attachApiCalls } from '../support/api-recorder';
+import { apiCallsMode } from '../config/diagnostics';
+
+/** Headers sent on every request to an API environment. */
+function apiHeaders(apiEnv: ApiEnvironment): Record<string, string> {
+  return {
+    Accept: 'application/json',
+    ...(apiEnv.token ? { Authorization: `Bearer ${apiEnv.token}` } : {}),
+  };
+}
 
 /**
  * Creates the request context for an API environment. Errors from it never contain the token:
@@ -15,10 +25,7 @@ export async function newApiContext(request: APIRequest, apiEnv: ApiEnvironment)
   const context = await request.newContext({
     baseURL: apiEnv.baseURL,
     timeout: apiEnv.timeoutMs,
-    extraHTTPHeaders: {
-      Accept: 'application/json',
-      ...(apiEnv.token ? { Authorization: `Bearer ${apiEnv.token}` } : {}),
-    },
+    extraHTTPHeaders: apiHeaders(apiEnv),
   });
   const redacted = withRedactedErrors(context, [apiEnv.token]);
   // Read-only environments (including every production run) reject write requests outright.
@@ -26,7 +33,10 @@ export async function newApiContext(request: APIRequest, apiEnv: ApiEnvironment)
 }
 
 type TestFixtures = {
-  /** Request context for the configured API environment (base URL, timeout, optional auth). */
+  /**
+   * Request context for the configured API environment (base URL, timeout, optional auth).
+   * If the test fails, its last 20 calls are attached, redacted, as "api-calls" (PW_API_CALLS).
+   */
   api: APIRequestContext;
   /** Request context for the local stub server (error, timeout and malformed-JSON scenarios). */
   stubApi: APIRequestContext;
@@ -66,9 +76,16 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     { scope: 'worker' },
   ],
 
-  api: async ({ playwright, apiEnv }, use) => {
+  api: async ({ playwright, apiEnv }, use, testInfo) => {
     const context = await newApiContext(playwright.request, apiEnv);
-    await use(context);
+    if (apiCallsMode() === 'off') {
+      await use(context);
+    } else {
+      const recorder = new ApiCallRecorder({ baseURL: apiEnv.baseURL, defaultHeaders: apiHeaders(apiEnv), secrets: [apiEnv.token] });
+      await use(recorder.wrap(context));
+      // Torn down after cleanup (which depends on api), so failed cleanup calls are included.
+      await attachApiCalls(testInfo, recorder);
+    }
     await context.dispose();
   },
 

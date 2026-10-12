@@ -8,6 +8,10 @@ import type { AddressInfo } from 'node:net';
  *   GET /delay/:ms     -> responds 200 after the given delay
  *   GET /auth-hash     -> responds 200 with a SHA-256 hash of the Authorization header
  *   GET /malformed     -> responds 200 with an invalid JSON body
+ *   ANY /echo          -> responds 200 with the request's method, headers, query and body;
+ *                         its Cookie header is sent back as Set-Cookie. ?format=text|html|binary
+ *                         changes the response content type (default JSON)
+ *   GET /large/:bytes  -> responds 200 with a JSON body of roughly that many bytes
  * Anything else       -> 404
  */
 export interface StubServer {
@@ -45,6 +49,33 @@ export async function startStubServer(): Promise<StubServer> {
       const authorization = req.headers.authorization ?? '';
       res.writeHead(200, jsonHeaders);
       res.end(JSON.stringify({ sha256: createHash('sha256').update(authorization).digest('hex') }));
+      return;
+    }
+
+    if (pathname === '/echo') {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        const { searchParams } = new URL(req.url ?? '/', 'http://localhost');
+        const echo = JSON.stringify({
+          method: req.method,
+          headers: req.headers,
+          query: Object.fromEntries(searchParams),
+          body: Buffer.concat(chunks).toString('utf8'),
+        });
+        const types: Record<string, string> = { text: 'text/plain', html: 'text/html', binary: 'application/octet-stream' };
+        const headers: Record<string, string> = { 'content-type': types[searchParams.get('format') ?? ''] ?? jsonHeaders['content-type'] };
+        if (req.headers.cookie) headers['set-cookie'] = req.headers.cookie;
+        res.writeHead(200, headers);
+        res.end(echo);
+      });
+      return;
+    }
+
+    const large = pathname.match(/^\/large\/(\d+)$/);
+    if (large) {
+      res.writeHead(200, jsonHeaders);
+      res.end(JSON.stringify({ data: 'x'.repeat(Number(large[1])) }));
       return;
     }
 

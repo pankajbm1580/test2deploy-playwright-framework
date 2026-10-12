@@ -9,6 +9,7 @@
     "test:api": "playwright test -c playwright.api.config.ts",
     "test:all": "playwright test -c playwright.all.config.ts",
     "typecheck": "tsc --noEmit",
+    "verify:redaction": "playwright test -c framework/verification/playwright.config.ts",
     "report:ui": "playwright show-report playwright-report",
     "report:api": "playwright show-report playwright-report-api",
     "report:all": "playwright show-report playwright-report-all"

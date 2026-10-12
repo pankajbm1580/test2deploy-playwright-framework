@@ -1,6 +1,7 @@
 import { test, expect, newApiContext } from '../fixtures/api';
 import { CleanupRegistry } from '../support/cleanup';
 import { resolveApiEnvironment } from './support/test-client';
+import { FAKE_SECRET_TAG, fakeSecrets } from './support/fake-secrets';
 
 /** Runs the registry, which must fail, and returns the error message. */
 async function runError(registry: CleanupRegistry): Promise<string> {
@@ -78,7 +79,7 @@ test.describe('Test data cleanup', () => {
   });
 
   test('Cleanup errors never contain the API token', async ({ playwright, stubServer }) => {
-    const fakeToken = 'fake-token-marker-789';
+    const fakeToken = fakeSecrets.token;
     const apiEnv = resolveApiEnvironment({ API_ENV: 'qa', API_BASE_URL: stubServer.baseURL, API_TOKEN: fakeToken });
     const api = await newApiContext(playwright.request, apiEnv);
     try {
@@ -94,6 +95,23 @@ test.describe('Test data cleanup', () => {
     } finally {
       await api.dispose();
     }
+  });
+
+  test('Cleanup errors mask sensitive query parameters in labels and cookies in step errors', async ({ stubApi }) => {
+    const registry = new CleanupRegistry(stubApi);
+    registry.delete(`/status/500?session=${fakeSecrets.session}&id=7`);
+    registry.add('cookie step', () => {
+      throw new Error(`\u001b[2m    - cookie: sid=${fakeSecrets.cookie}; x=1\u001b[22m`);
+    });
+
+    const message = await runError(registry);
+
+    expect(message).not.toContain(FAKE_SECRET_TAG);
+    expect(message).toBe(
+      'Test data cleanup failed for 2 of 2 step(s):\n' +
+        '  - cookie step:     - cookie: ***\n' +
+        '  - DELETE /status/500?session=***&id=7: responded 500 Internal Server Error',
+    );
   });
 });
 
