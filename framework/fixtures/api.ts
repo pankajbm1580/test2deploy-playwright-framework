@@ -5,6 +5,7 @@ import { startStubServer, type StubServer } from '../support/stub-server';
 import { schemaMatchers } from '../support/schema';
 import { withRedactedErrors } from '../support/redact';
 import { withWritesBlocked } from '../support/read-only';
+import { CleanupRegistry } from '../support/cleanup';
 
 /**
  * Creates the request context for an API environment. Errors from it never contain the token:
@@ -29,6 +30,8 @@ type TestFixtures = {
   api: APIRequestContext;
   /** Request context for the local stub server (error, timeout and malformed-JSON scenarios). */
   stubApi: APIRequestContext;
+  /** Undo steps for test data, run after the test whether it passed or failed. */
+  cleanup: CleanupRegistry;
 };
 
 /** Set per project by createConfig(): the client's settings (never tokens or credentials). */
@@ -67,6 +70,14 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     const context = await newApiContext(playwright.request, apiEnv);
     await use(context);
     await context.dispose();
+  },
+
+  // Depends on api, so it is torn down (and its steps run) before the request context is disposed.
+  // A failing step fails the test, so leftover data is never silent.
+  cleanup: async ({ api }, use) => {
+    const registry = new CleanupRegistry(api);
+    await use(registry);
+    await registry.run();
   },
 
   stubApi: async ({ playwright, stubServer }, use) => {

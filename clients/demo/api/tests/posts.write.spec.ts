@@ -8,13 +8,16 @@ test.describe('Write resources', () => {
     test.skip(apiEnv.readOnly, `Write tests are disabled for read-only environment "${apiEnv.name}"`);
   });
 
-  test('POST /posts returns 201 and echoes the new post with an id', async ({ api }) => {
+  test('POST /posts returns 201 and echoes the new post with an id', async ({ api, cleanup }) => {
     const payload = { userId: 1, title: 'API automation', body: 'Created by Playwright' };
 
     const response = await api.post('/posts', { data: payload });
 
     expect(response.status()).toBe(201);
     const body: Post = await response.json();
+    // Registered before further assertions so the post is removed even if they fail.
+    // JSONPlaceholder persists nothing, so here this demonstrates the pattern for real clients.
+    cleanup.delete(`/posts/${body.id}`);
     expect(body).toMatchSchema(postSchema);
     expect(body).toEqual({ ...payload, id: expect.any(Number) });
   });
