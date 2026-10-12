@@ -15,6 +15,8 @@ node_modules/
 /playwright-report-api/
 /test-results-all/
 /playwright-report-all/
+/test-results-login-demo/
+/playwright-report-login-demo/
 
 # Redaction check output (npm run verify:redaction)
 /test-results-verification/

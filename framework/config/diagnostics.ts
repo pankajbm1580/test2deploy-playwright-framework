@@ -101,6 +101,7 @@ export function reporters(
   htmlFolder: string,
   env: NodeJS.ProcessEnv = process.env,
   argv: readonly string[] = process.argv,
+  junitName: string = suite,
 ): ReporterDescription[] {
   if (listOnly(argv)) return [['list']];
   return [
@@ -108,6 +109,6 @@ export function reporters(
     ...(htmlReportEnabled(suite, env)
       ? [['html', { outputFolder: htmlFolder, open: 'never' }] satisfies ReporterDescription]
       : []),
-    ['junit', { outputFile: `reports/junit/${suite}.xml` }],
+    ['junit', { outputFile: `reports/junit/${junitName}.xml` }],
   ];
 }

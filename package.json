@@ -8,6 +8,7 @@
     "test:e2e": "playwright test",
     "test:api": "playwright test -c playwright.api.config.ts",
     "test:all": "playwright test -c playwright.all.config.ts",
+    "test:login-demo": "playwright test -c playwright.login-demo.config.ts",
     "typecheck": "tsc --noEmit",
     "verify:redaction": "playwright test -c framework/verification/playwright.config.ts",
     "report:ui": "playwright show-report playwright-report",

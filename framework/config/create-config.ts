@@ -3,6 +3,7 @@ import { loadEnvFile } from './load-env';
 import { apiCallsMode, apiDiagnostics, htmlReportEnabled, htmlReportMode, redactingReporter, reporters, uiDiagnostics } from './diagnostics';
 import type { ClientConfig } from './client';
 import { assertSafeReporterCommandLine, reporterGuardPath } from './reporter-guard';
+import { loginStatePath } from '../support/login';
 import { resolveApiEnvironment, resolveUiEnvironment } from './environments';
 import type { ApiFixtureOptions } from '../fixtures/api';
 
@@ -24,10 +25,30 @@ function rootTestDir(suite: Suite, client: ClientConfig): string {
 function uiProjects(client: ClientConfig): Project[] {
   const testDir = `${client.dir}/ui`;
   const use = { baseURL: resolveUiEnvironment(process.env, client).baseURL, ...uiDiagnostics() };
-  return [
+  const browsers: Project[] = [
     { name: 'chromium', testDir, use: { ...devices['Desktop Chrome'], ...use } },
     { name: 'firefox', testDir, use: { ...devices['Desktop Firefox'], ...use } },
     { name: 'webkit', testDir, use: { ...devices['Desktop Safari'], ...use } },
+  ];
+  const login = client.ui.login;
+  if (!login) return browsers;
+
+  // Login setup (framework/support/login.ts): log in once, then start every test signed in.
+  // Traces stay off for the setup (it types the password) and for signed-in tests (their
+  // requests carry the session cookies), as for the API suite. Failure screenshots remain.
+  const setupMatch = new RegExp(`(^|[\\\\/])${login.setupFile.replace(/[.]/g, '\\.')}$`);
+  return [
+    {
+      name: 'setup',
+      testDir,
+      testMatch: setupMatch,
+      use: { ...devices['Desktop Chrome'], ...use, trace: 'off', screenshot: 'off', video: 'off' },
+    },
+    ...browsers.map((project) => ({
+      ...project,
+      dependencies: ['setup'],
+      use: { ...project.use, storageState: loginStatePath(client), trace: 'off' as const },
+    })),
   ];
 }
 
@@ -40,7 +61,14 @@ function apiProjects(client: ClientConfig): Project<{}, ApiFixtureOptions>[] {
   ];
 }
 
-export function createConfig({ suite, client }: { suite: Suite; client: ClientConfig }) {
+/**
+ * `outputName` gives a suite its own report, results and JUnit names (playwright-report-<name>,
+ * test-results-<name>, reports/junit/<name>.xml), for a second client next to the default one.
+ */
+export function createConfig({ suite, client, outputName }: { suite: Suite; client: ClientConfig; outputName?: string }) {
+  const output = outputName
+    ? { report: `playwright-report-${outputName}`, results: `test-results-${outputName}`, junit: outputName }
+    : { ...outputs[suite], junit: suite };
   // Before any reporter starts: refuse a --reporter override that drops the redacting reporter,
   // and reporters that would write files during a --list run.
   assertSafeReporterCommandLine();
@@ -79,10 +107,10 @@ export function createConfig({ suite, client }: { suite: Suite; client: ClientCo
     workers: isCI ? 1 : undefined,
     // The redacting reporter goes first: it masks secrets and cookies in Playwright's own
     // results before the list, HTML and JUnit reporters see them.
-    reporter: [redactingReporter, ...reporters(suite, outputs[suite].report)],
+    reporter: [redactingReporter, ...reporters(suite, output.report, process.env, process.argv, output.junit)],
     // Backstop: refuses the run if the reporters it resolved do not start with the redacting reporter.
     globalSetup: reporterGuardPath,
-    outputDir: outputs[suite].results,
+    outputDir: output.results,
     projects: [
       ...(suite !== 'api' ? uiProjects(client) : []),
       ...(suite !== 'ui' ? apiProjects(client) : []),

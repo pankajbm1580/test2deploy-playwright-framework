@@ -25,6 +25,15 @@ export interface ClientConfig {
   ui: {
     /** Used when UI_BASE_URL is not set. */
     defaultBaseURL: string;
+    /**
+     * Optional login setup (framework/support/login.ts). When set, a "setup" project runs this
+     * file from <dir>/ui once per run to log in with UI_USERNAME and UI_PASSWORD, and every
+     * browser project starts from the saved, signed-in state. Omit it for apps without login.
+     */
+    login?: {
+      /** File name in <dir>/ui, ending in .setup.ts, e.g. "auth.setup.ts". */
+      setupFile: string;
+    };
   };
   /**
    * Hostnames of production systems, e.g. ['example.com']. A listed host also covers its
@@ -51,6 +60,9 @@ export function defineClient<T extends ClientConfig>(client: T): T {
   }
 
   parseBaseUrl(`${label} ui.defaultBaseURL`, client.ui.defaultBaseURL);
+  if (client.ui.login && !/^[\w.-]+\.setup\.ts$/.test(client.ui.login.setupFile)) {
+    throw new Error(`${label}: ui.login.setupFile must be a file name in ${client.dir}/ui ending in .setup.ts, such as "auth.setup.ts".`);
+  }
 
   const names = Object.keys(client.api.environments);
   if (names.length === 0) {

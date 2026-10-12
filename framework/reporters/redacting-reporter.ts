@@ -1,10 +1,12 @@
-import type { Reporter, TestCase, TestError, TestResult, TestStep } from '@playwright/test/reporter';
+import fs from 'node:fs';
+import path from 'node:path';
+import type { FullConfig, Reporter, TestCase, TestError, TestResult, TestStep } from '@playwright/test/reporter';
 import { redactReportText } from '../support/sanitize';
 
 type Writable<T> = { -readonly [K in keyof T]: T[K] };
 type StepWithSubtitle = Writable<TestStep> & { subtitle?: string };
 
-// Attachments kept in memory whose bodies are text and can be redacted in place.
+// Text attachments, which can be redacted in place.
 const TEXT_ATTACHMENT = /^(?:text\/|application\/(?:json|xml|x-www-form-urlencoded)\b|application\/[\w.+-]*\+json\b)/i;
 
 /**
@@ -17,8 +19,11 @@ const TEXT_ATTACHMENT = /^(?:text\/|application\/(?:json|xml|x-www-form-urlencod
  * Every reporter receives the same result objects in list order, and the HTML report is
  * built from them at the end of the run, so later reporters only ever see redacted text.
  *
- * Attachments stored as files are not rewritten: the framework's own (api-calls.json) are
- * redacted before they are written.
+ * Text attachments stored as files are redacted in place too, but only inside the run's own
+ * output folders (test-results-*), which Playwright creates and cleans for each run: for example
+ * the error-context.md page snapshot, which shows the values typed into form fields (a login
+ * setup's password included). Files elsewhere, and binary files (screenshots, traces, videos),
+ * are not rewritten. The framework's own api-calls.json is redacted before it is written.
  *
  * Live terminal output is NOT redacted. Terminal reporters print progress, errors and test
  * stdout/stderr as it happens (onStdOut, onStepBegin, ...), and Playwright adds its own terminal
@@ -26,10 +31,20 @@ const TEXT_ATTACHMENT = /^(?:text\/|application\/(?:json|xml|x-www-form-urlencod
  * redacted. framework/config/reporter-guard.ts refuses runs where this reporter is not first.
  */
 export default class RedactingReporter implements Reporter {
-  private readonly secrets = [process.env.API_TOKEN].filter((secret): secret is string => !!secret);
+  // The API token and the login credentials (framework/support/login.ts) are masked wherever they
+  // appear, e.g. in the "Fill" step a login setup records when it types the password.
+  private readonly secrets = [process.env.API_TOKEN, process.env.UI_PASSWORD, process.env.UI_USERNAME].filter(
+    (secret): secret is string => !!secret,
+  );
+
+  private outputDirs: string[] = [];
 
   printsToStdio(): boolean {
     return false;
+  }
+
+  onBegin(config: FullConfig): void {
+    this.outputDirs = [...new Set(config.projects.map((project) => path.resolve(project.outputDir)))];
   }
 
   onStepEnd(_test: TestCase, _result: TestResult, step: TestStep): void {
@@ -44,14 +59,35 @@ export default class RedactingReporter implements Reporter {
     writable.stdout = result.stdout.map((chunk) => this.redactChunk(chunk));
     writable.stderr = result.stderr.map((chunk) => this.redactChunk(chunk));
     for (const attachment of result.attachments) {
-      if (attachment.body && TEXT_ATTACHMENT.test(attachment.contentType)) {
+      if (!TEXT_ATTACHMENT.test(attachment.contentType)) continue;
+      if (attachment.body) {
         (attachment as Writable<typeof attachment>).body = Buffer.from(this.text(attachment.body.toString('utf8')), 'utf8');
+      } else if (attachment.path && this.inOutputDir(attachment.path)) {
+        this.redactFile(attachment.path);
       }
     }
   }
 
   onError(error: TestError): void {
     this.redactError(error);
+  }
+
+  private inOutputDir(file: string): boolean {
+    return this.outputDirs.some((dir) => {
+      const relative = path.relative(dir, path.resolve(file));
+      return !!relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+    });
+  }
+
+  private redactFile(file: string): void {
+    let original: string;
+    try {
+      original = fs.readFileSync(file, 'utf8');
+    } catch {
+      return; // Missing or unreadable: there is nothing for a later reporter to copy either.
+    }
+    const redacted = this.text(original);
+    if (redacted !== original) fs.writeFileSync(file, redacted, 'utf8');
   }
 
   private text(value: string): string {
