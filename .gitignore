@@ -40,3 +40,7 @@ node_modules/
 
 # Future framework report folder (Phase 1)
 /reports/
+
+# SmartPaper test output
+/test-results-smartpaper/
+/playwright-report-smartpaper/
