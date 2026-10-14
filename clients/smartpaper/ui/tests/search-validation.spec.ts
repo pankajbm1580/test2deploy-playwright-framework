@@ -10,7 +10,13 @@ test('P1: Search for a known ISBN', async ({ page }) => {
   });
 
   await expect(searchBox).toBeVisible();
-  await searchBox.fill(ISBN);
+
+  // WebKit can fill the box before the page hydrates, and hydration then
+  // clears it. Re-fill until the value sticks before searching.
+  await expect(async () => {
+    await searchBox.fill(ISBN);
+    await expect(searchBox).toHaveValue(ISBN, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
 
   await page.getByRole('button', { name: 'Search' }).click();
 
