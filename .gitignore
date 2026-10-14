@@ -13,6 +13,14 @@ node_modules/
 # API test output
 /test-results-api/
 /playwright-report-api/
+/test-results-all/
+/playwright-report-all/
+/test-results-login-demo/
+/playwright-report-login-demo/
+
+# Redaction check output (npm run verify:redaction)
+/test-results-verification/
+/playwright-report-verification/
 
 # Environment files (keep the committed template)
 .env.*
@@ -32,3 +40,7 @@ node_modules/
 
 # Future framework report folder (Phase 1)
 /reports/
+
+# SmartPaper test output
+/test-results-smartpaper/
+/playwright-report-smartpaper/
